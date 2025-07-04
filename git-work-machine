@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+COMMAND_NAME="git-work-machine"
+VERSION="1.0.0"
+
+usage() {
+    cat << EOF
+Usage: $COMMAND_NAME <command> [options]
+
+Commands:
+    add <branch>           Create a new worktree with branch name as directory
+    add <branch> -p <path> Create a new worktree at specified path
+    list                   List all worktrees
+    remove <path>          Remove a worktree
+    remove <path> -f       Force remove a worktree
+    help                   Show this help message
+
+Options:
+    -p, --path <path>      Specify custom path for worktree
+    -c, --copy-ignored     Copy .gitignore'd files from main worktree (default: true)
+    --no-copy-ignored      Don't copy .gitignore'd files
+    -h, --help             Show help
+
+Examples:
+    $COMMAND_NAME add feature/new-feature
+    $COMMAND_NAME add feature/new-feature -p ../my-feature
+    $COMMAND_NAME add hotfix/urgent --no-copy-ignored
+    $COMMAND_NAME list
+    $COMMAND_NAME remove ../my-feature
+
+EOF
+}
+
+error() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+info() {
+    echo "Info: $1" >&2
+}
+
+get_main_worktree() {
+    git worktree list --porcelain | grep -E '^worktree ' | head -1 | cut -d' ' -f2-
+}
+
+copy_gitignored_files() {
+    local source_dir="$1"
+    local target_dir="$2"
+    
+    if [[ ! -f "$source_dir/.gitignore" ]]; then
+        info "No .gitignore file found in source directory"
+        return
+    fi
+    
+    info "Copying .gitignore'd files from $source_dir to $target_dir"
+    
+    # First, copy the .gitignore file itself
+    cp "$source_dir/.gitignore" "$target_dir/" 2>/dev/null || true
+    
+    # Read .gitignore patterns and copy matching files
+    while IFS= read -r pattern; do
+        # Skip empty lines and comments
+        [[ -z "$pattern" || "$pattern" =~ ^# ]] && continue
+        
+        # Remove leading/trailing whitespace
+        pattern=$(echo "$pattern" | xargs)
+        
+        # Skip negation patterns
+        [[ "$pattern" =~ ^! ]] && continue
+        
+        # Handle patterns
+        if [[ "$pattern" =~ /$ ]]; then
+            # Directory pattern
+            pattern="${pattern%/}"
+            if [[ -d "$source_dir/$pattern" ]]; then
+                info "Copying directory: $pattern"
+                cp -r "$source_dir/$pattern" "$target_dir/" 2>/dev/null || true
+            fi
+        else
+            # File or wildcard pattern
+            # Use find to handle wildcards
+            while IFS= read -r -d '' file; do
+                relative_path="${file#$source_dir/}"
+                target_file="$target_dir/$relative_path"
+                target_file_dir=$(dirname "$target_file")
+                
+                # Create directory structure if needed
+                mkdir -p "$target_file_dir"
+                
+                info "Copying: $relative_path"
+                cp "$file" "$target_file" 2>/dev/null || true
+            done < <(find "$source_dir" -path "$source_dir/.git" -prune -o -name "$pattern" -type f -print0)
+        fi
+    done < "$source_dir/.gitignore"
+}
+
+add_worktree() {
+    local branch="$1"
+    local path=""
+    local copy_ignored=true
+    
+    # Parse additional arguments
+    shift
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -p|--path)
+                path="$2"
+                shift 2
+                ;;
+            -c|--copy-ignored)
+                copy_ignored=true
+                shift
+                ;;
+            --no-copy-ignored)
+                copy_ignored=false
+                shift
+                ;;
+            *)
+                error "Unknown option: $1"
+                ;;
+        esac
+    done
+    
+    # If no path specified, use branch name as directory
+    if [[ -z "$path" ]]; then
+        # Convert branch name to directory name
+        # Replace / with - and remove any special characters
+        path=$(echo "$branch" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9_-]||g')
+        
+        # If path already exists, append a number
+        if [[ -e "$path" ]]; then
+            local i=2
+            while [[ -e "${path}-${i}" ]]; do
+                ((i++))
+            done
+            path="${path}-${i}"
+        fi
+    fi
+    
+    # Create the worktree
+    info "Creating worktree at '$path' for branch '$branch'"
+    
+    # Check if branch exists
+    if git show-ref --verify --quiet "refs/heads/$branch"; then
+        # Branch exists, create worktree
+        git worktree add "$path" "$branch"
+    else
+        # Branch doesn't exist, create new branch
+        git worktree add -b "$branch" "$path"
+    fi
+    
+    # Copy gitignored files if requested
+    if [[ "$copy_ignored" == true ]]; then
+        local main_worktree=$(get_main_worktree)
+        copy_gitignored_files "$main_worktree" "$path"
+    fi
+    
+    echo "Successfully created worktree at '$path' for branch '$branch'"
+}
+
+list_worktrees() {
+    git worktree list
+}
+
+remove_worktree() {
+    local path="$1"
+    local force=false
+    
+    # Check for force flag
+    if [[ "${2:-}" == "-f" || "${2:-}" == "--force" ]]; then
+        force=true
+    fi
+    
+    info "Removing worktree at '$path'"
+    if [[ "$force" == true ]]; then
+        git worktree remove --force "$path"
+    else
+        git worktree remove "$path"
+    fi
+    echo "Successfully removed worktree at '$path'"
+}
+
+main() {
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        error "Not in a git repository"
+    fi
+    
+    # Parse command
+    case "${1:-}" in
+        add)
+            if [[ $# -lt 2 ]]; then
+                error "Branch name required"
+            fi
+            add_worktree "${@:2}"
+            ;;
+        list)
+            list_worktrees
+            ;;
+        remove)
+            if [[ $# -lt 2 ]]; then
+                error "Path required"
+            fi
+            remove_worktree "$2" "${3:-}"
+            ;;
+        help|-h|--help)
+            usage
+            ;;
+        version|-v|--version)
+            echo "$COMMAND_NAME version $VERSION"
+            ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
