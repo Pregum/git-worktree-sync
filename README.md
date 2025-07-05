@@ -19,21 +19,27 @@ Enhanced Git worktree management tool that solves common worktree pain points:
 ### Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-username/git-worktree-sync/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Pregum/git-worktree-sync/main/install.sh | bash
 ```
 
 ### Manual Install
 
 ```bash
-git clone https://github.com/your-username/git-worktree-sync.git
+git clone https://github.com/Pregum/git-worktree-sync.git
 cd git-worktree-sync
 ./install.sh
 ```
 
-Or install to a custom directory:
+Or install to a custom directory (recommended if you don't have sudo access):
 
 ```bash
 INSTALL_DIR=~/bin ./install.sh
+```
+
+**Note:** If you install to `~/bin`, add it to your PATH by adding this line to your shell configuration file (`.bashrc`, `.zshrc`, etc.):
+
+```bash
+export PATH="$PATH:$HOME/bin"
 ```
 
 ## Configuration
