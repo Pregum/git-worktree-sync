@@ -1,0 +1,14 @@
+# git-work-machine configuration file example
+# Copy this to ~/.git-work-machine.conf and customize
+
+# Base directory for worktrees
+# If set, new worktrees will be created under this directory
+# Example: DEFAULT_BASE_DIR="../worktrees"
+DEFAULT_BASE_DIR=""
+
+# Default behavior for copying .gitignore'd files
+# Set to "false" to disable by default
+# DEFAULT_COPY_IGNORED=true
+
+# Custom gitignore patterns to always copy
+# CUSTOM_COPY_PATTERNS=".env.example .vscode/settings.json"

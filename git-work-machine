@@ -5,6 +5,18 @@ set -euo pipefail
 COMMAND_NAME="git-work-machine"
 VERSION="1.0.0"
 
+# Configuration
+CONFIG_FILE="${GIT_WORK_MACHINE_CONFIG:-$HOME/.git-work-machine.conf}"
+DEFAULT_BASE_DIR=""
+
+# Load configuration if exists
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+fi
+
+# Environment variable overrides
+BASE_DIR="${GIT_WORK_MACHINE_BASE_DIR:-$DEFAULT_BASE_DIR}"
+
 usage() {
     cat << EOF
 Usage: $COMMAND_NAME <command> [options]
@@ -19,9 +31,16 @@ Commands:
 
 Options:
     -p, --path <path>      Specify custom path for worktree
+    -b, --base-dir <dir>   Base directory for worktrees (overrides config)
     -c, --copy-ignored     Copy .gitignore'd files from main worktree (default: true)
     --no-copy-ignored      Don't copy .gitignore'd files
     -h, --help             Show help
+
+Configuration:
+    Config file: ~/.git-work-machine.conf
+    Environment variables:
+        GIT_WORK_MACHINE_BASE_DIR - Base directory for worktrees
+        GIT_WORK_MACHINE_CONFIG   - Path to config file
 
 Examples:
     $COMMAND_NAME add feature/new-feature
@@ -101,6 +120,7 @@ add_worktree() {
     local branch="$1"
     local path=""
     local copy_ignored=true
+    local custom_base_dir=""
     
     # Parse additional arguments
     shift
@@ -108,6 +128,10 @@ add_worktree() {
         case "$1" in
             -p|--path)
                 path="$2"
+                shift 2
+                ;;
+            -b|--base-dir)
+                custom_base_dir="$2"
                 shift 2
                 ;;
             -c|--copy-ignored)
@@ -124,19 +148,30 @@ add_worktree() {
         esac
     done
     
+    # Determine base directory
+    local effective_base_dir="${custom_base_dir:-$BASE_DIR}"
+    
     # If no path specified, use branch name as directory
     if [[ -z "$path" ]]; then
         # Convert branch name to directory name
         # Replace / with - and remove any special characters
-        path=$(echo "$branch" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9_-]||g')
+        local dir_name=$(echo "$branch" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9_-]||g')
+        
+        # Apply base directory if configured
+        if [[ -n "$effective_base_dir" ]]; then
+            path="${effective_base_dir}/${dir_name}"
+        else
+            path="$dir_name"
+        fi
         
         # If path already exists, append a number
         if [[ -e "$path" ]]; then
             local i=2
-            while [[ -e "${path}-${i}" ]]; do
+            local base_path="$path"
+            while [[ -e "${base_path}-${i}" ]]; do
                 ((i++))
             done
-            path="${path}-${i}"
+            path="${base_path}-${i}"
         fi
     fi
     
