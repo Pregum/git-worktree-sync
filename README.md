@@ -1,4 +1,4 @@
-# git-work-machine
+# git-worktree-sync
 
 Enhanced Git worktree management tool that solves common worktree pain points:
 
@@ -19,14 +19,14 @@ Enhanced Git worktree management tool that solves common worktree pain points:
 ### Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-username/git-work-machine/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/your-username/git-worktree-sync/main/install.sh | bash
 ```
 
 ### Manual Install
 
 ```bash
-git clone https://github.com/your-username/git-work-machine.git
-cd git-work-machine
+git clone https://github.com/your-username/git-worktree-sync.git
+cd git-worktree-sync
 ./install.sh
 ```
 
@@ -40,7 +40,7 @@ INSTALL_DIR=~/bin ./install.sh
 
 ### Config File
 
-Create `~/.git-work-machine.conf`:
+Create `~/.git-worktree-sync.conf`:
 
 ```bash
 # Base directory for worktrees
@@ -53,8 +53,8 @@ DEFAULT_BASE_DIR="../worktrees"
 ### Environment Variables
 
 ```bash
-export GIT_WORK_MACHINE_BASE_DIR="../worktrees"
-export GIT_WORK_MACHINE_CONFIG="~/.git-work-machine.conf"
+export GIT_WORKTREE_SYNC_BASE_DIR="../worktrees"
+export GIT_WORKTREE_SYNC_CONFIG="~/.git-worktree-sync.conf"
 ```
 
 ## Usage
@@ -63,33 +63,33 @@ export GIT_WORK_MACHINE_CONFIG="~/.git-work-machine.conf"
 
 ```bash
 # Create worktree with auto-generated directory name
-git-work-machine add feature/new-feature
+git-worktree-sync add feature/new-feature
 # → Creates: ../worktrees/feature-new-feature
 
 # Create worktree with custom path
-git-work-machine add feature/new-feature -p ../my-feature
+git-worktree-sync add feature/new-feature -p ../my-feature
 
 # Create worktree without copying .gitignore'd files
-git-work-machine add hotfix/urgent --no-copy-ignored
+git-worktree-sync add hotfix/urgent --no-copy-ignored
 
 # List all worktrees
-git-work-machine list
+git-worktree-sync list
 
 # Remove worktree
-git-work-machine remove ../worktrees/feature-new-feature
+git-worktree-sync remove ../worktrees/feature-new-feature
 
 # Force remove worktree (even with uncommitted changes)
-git-work-machine remove ../worktrees/feature-new-feature -f
+git-worktree-sync remove ../worktrees/feature-new-feature -f
 ```
 
 ### Advanced Options
 
 ```bash
 # Override base directory for single command
-git-work-machine add feature/test -b /tmp/worktrees
+git-worktree-sync add feature/test -b /tmp/worktrees
 
 # Create worktree with custom base directory and path
-git-work-machine add feature/test -b ../projects -p custom-name
+git-worktree-sync add feature/test -b ../projects -p custom-name
 ```
 
 ## Lazygit Integration
@@ -101,13 +101,13 @@ customCommands:
   # Create worktree with .gitignore file copying
   - key: 'W'
     context: 'localBranches'
-    description: 'Create worktree (git-work-machine)'
+    description: 'Create worktree (git-worktree-sync)'
     prompts:
       - type: 'input'
         title: 'Enter worktree path (leave empty for auto):'
         key: 'WorktreePath'
         initialValue: ''
-    command: 'git-work-machine add {{.SelectedLocalBranch.Name}}{{if .Form.WorktreePath}} -p {{.Form.WorktreePath}}{{end}}'
+    command: 'git-worktree-sync add {{.SelectedLocalBranch.Name}}{{if .Form.WorktreePath}} -p {{.Form.WorktreePath}}{{end}}'
   
   # Create worktree without .gitignore file copying
   - key: 'w'
@@ -118,7 +118,7 @@ customCommands:
         title: 'Enter worktree path (leave empty for auto):'
         key: 'WorktreePath'
         initialValue: ''
-    command: 'git-work-machine add {{.SelectedLocalBranch.Name}}{{if .Form.WorktreePath}} -p {{.Form.WorktreePath}}{{end}} --no-copy-ignored'
+    command: 'git-worktree-sync add {{.SelectedLocalBranch.Name}}{{if .Form.WorktreePath}} -p {{.Form.WorktreePath}}{{end}} --no-copy-ignored'
   
   # Create worktree from new branch
   - key: 'N'
@@ -132,7 +132,7 @@ customCommands:
         title: 'Worktree path (leave empty for auto):'
         key: 'WorktreePath'
         initialValue: ''
-    command: 'git-work-machine add {{.Form.BranchName}}{{if .Form.WorktreePath}} -p {{.Form.WorktreePath}}{{end}}'
+    command: 'git-worktree-sync add {{.Form.BranchName}}{{if .Form.WorktreePath}} -p {{.Form.WorktreePath}}{{end}}'
   
   # Remove worktree
   - key: 'D'
@@ -142,7 +142,7 @@ customCommands:
       - type: 'confirm'
         title: 'Remove worktree?'
         body: 'Are you sure you want to remove worktree at {{.SelectedWorktree.Path}}?'
-    command: 'git-work-machine remove {{.SelectedWorktree.Path}}'
+    command: 'git-worktree-sync remove {{.SelectedWorktree.Path}}'
   
   # Force remove worktree
   - key: 'X'
@@ -152,7 +152,7 @@ customCommands:
       - type: 'confirm'
         title: 'Force remove worktree?'
         body: 'This will forcefully remove worktree at {{.SelectedWorktree.Path}} even if it has uncommitted changes!'
-    command: 'git-work-machine remove {{.SelectedWorktree.Path}} -f'
+    command: 'git-worktree-sync remove {{.SelectedWorktree.Path}} -f'
 ```
 
 ### Lazygit Usage
@@ -170,22 +170,22 @@ customCommands:
 
 ```bash
 # Configure base directory
-echo 'DEFAULT_BASE_DIR="../worktrees"' > ~/.git-work-machine.conf
+echo 'DEFAULT_BASE_DIR="../worktrees"' > ~/.git-worktree-sync.conf
 
 # Create worktree for feature branch
-git-work-machine add feature/user-authentication
+git-worktree-sync add feature/user-authentication
 # → Creates: ../worktrees/feature-user-authentication
 # → Copies: .env, .env.local, .vscode/, etc.
 
 # Create worktree for hotfix
-git-work-machine add hotfix/security-patch
+git-worktree-sync add hotfix/security-patch
 # → Creates: ../worktrees/hotfix-security-patch
 
 # List all worktrees
-git-work-machine list
+git-worktree-sync list
 
 # Remove completed worktree
-git-work-machine remove ../worktrees/feature-user-authentication
+git-worktree-sync remove ../worktrees/feature-user-authentication
 ```
 
 ### Directory Structure
@@ -239,8 +239,8 @@ project/
 
 | Variable | Description |
 |----------|-------------|
-| `GIT_WORK_MACHINE_BASE_DIR` | Override base directory |
-| `GIT_WORK_MACHINE_CONFIG` | Path to config file |
+| `GIT_WORKTREE_SYNC_BASE_DIR` | Override base directory |
+| `GIT_WORKTREE_SYNC_CONFIG` | Path to config file |
 
 ## Contributing
 

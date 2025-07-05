@@ -2,11 +2,11 @@
 
 set -euo pipefail
 
-COMMAND_NAME="git-work-machine"
+COMMAND_NAME="git-worktree-sync"
 VERSION="1.0.0"
 
 # Configuration
-CONFIG_FILE="${GIT_WORK_MACHINE_CONFIG:-$HOME/.git-work-machine.conf}"
+CONFIG_FILE="${GIT_WORKTREE_SYNC_CONFIG:-$HOME/.git-worktree-sync.conf}"
 DEFAULT_BASE_DIR=""
 
 # Load configuration if exists
@@ -15,7 +15,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
 fi
 
 # Environment variable overrides
-BASE_DIR="${GIT_WORK_MACHINE_BASE_DIR:-$DEFAULT_BASE_DIR}"
+BASE_DIR="${GIT_WORKTREE_SYNC_BASE_DIR:-$DEFAULT_BASE_DIR}"
 
 usage() {
     cat << EOF
@@ -37,10 +37,10 @@ Options:
     -h, --help             Show help
 
 Configuration:
-    Config file: ~/.git-work-machine.conf
+    Config file: ~/.git-worktree-sync.conf
     Environment variables:
-        GIT_WORK_MACHINE_BASE_DIR - Base directory for worktrees
-        GIT_WORK_MACHINE_CONFIG   - Path to config file
+        GIT_WORKTREE_SYNC_BASE_DIR - Base directory for worktrees
+        GIT_WORKTREE_SYNC_CONFIG   - Path to config file
 
 Examples:
     $COMMAND_NAME add feature/new-feature

@@ -1,5 +1,5 @@
-# git-work-machine configuration file example
-# Copy this to ~/.git-work-machine.conf and customize
+# git-worktree-sync configuration file example
+# Copy this to ~/.git-worktree-sync.conf and customize
 
 # Base directory for worktrees
 # If set, new worktrees will be created under this directory
