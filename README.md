@@ -1,62 +1,255 @@
 # git-work-machine
 
-Git worktreeコマンドの拡張ツール。.gitignoreファイルのコピー機能とブランチ名からのディレクトリ自動生成機能を提供します。
+Enhanced Git worktree management tool that solves common worktree pain points:
 
-## 機能
+1. **Automatic .gitignore file copying** - Automatically copies .gitignore'd files (like .env, .vscode) to new worktrees
+2. **Smart directory naming** - Automatically generates directory names from branch names (e.g., `feature/new-feature` → `feature-new-feature`)
+3. **Configurable base directory** - Organize all worktrees under a single base directory
 
-1. **自動的な.gitignoreファイルのコピー** - 新しいworktreeを作成する際、メインworktreeから.gitignoreで管理されているファイル（.env、.vscodeなど）を自動的にコピーします
+## Features
 
-2. **ブランチ名からのディレクトリ自動生成** - ブランチ名を指定するだけで、適切なディレクトリ名を自動生成します（例: `feature/new-feature` → `feature-new-feature`）
+- 🚀 **Auto-generated directory names** from branch names
+- 📁 **Configurable base directory** for organized worktree management
+- 🔄 **Automatic .gitignore file copying** (.env, .vscode, etc.)
+- ⚡ **Seamless lazygit integration**
+- 🛠️ **Flexible configuration** via config file or environment variables
 
-## インストール
+## Installation
 
-```bash
-# スクリプトを実行可能にする
-chmod +x git-work-machine
-
-# パスの通った場所にコピー（オプション）
-cp git-work-machine /usr/local/bin/
-```
-
-## 使い方
-
-### 基本的な使用方法
+### Quick Install
 
 ```bash
-# 新しいworktreeを作成（ディレクトリ名は自動生成）
-./git-work-machine add feature/new-feature
-
-# カスタムパスを指定してworktreeを作成
-./git-work-machine add feature/new-feature -p ../my-feature
-
-# .gitignoreファイルをコピーせずにworktreeを作成
-./git-work-machine add hotfix/urgent --no-copy-ignored
-
-# worktreeの一覧表示
-./git-work-machine list
-
-# worktreeの削除
-./git-work-machine remove feature-new-feature
+curl -fsSL https://raw.githubusercontent.com/your-username/git-work-machine/main/install.sh | bash
 ```
 
-### コマンド
+### Manual Install
 
-- `add <branch>` - 新しいworktreeを作成（ブランチ名からディレクトリ名を自動生成）
-- `add <branch> -p <path>` - 指定したパスに新しいworktreeを作成
-- `list` - すべてのworktreeを一覧表示
-- `remove <path>` - worktreeを削除
-- `help` - ヘルプメッセージを表示
+```bash
+git clone https://github.com/your-username/git-work-machine.git
+cd git-work-machine
+./install.sh
+```
 
-### オプション
+Or install to a custom directory:
 
-- `-p, --path <path>` - worktreeのカスタムパスを指定
-- `-c, --copy-ignored` - .gitignoreファイルをコピー（デフォルト: true）
-- `--no-copy-ignored` - .gitignoreファイルをコピーしない
-- `-h, --help` - ヘルプを表示
+```bash
+INSTALL_DIR=~/bin ./install.sh
+```
 
-## 特徴
+## Configuration
 
-- ブランチ名に含まれる`/`は自動的に`-`に変換されます
-- 同名のディレクトリが既に存在する場合は、番号を付加します（例: `feature-test-2`）
-- .gitignoreに記載されているファイルやディレクトリを自動的に新しいworktreeにコピーします
-- ブランチが存在しない場合は、新しいブランチを作成します
+### Config File
+
+Create `~/.git-work-machine.conf`:
+
+```bash
+# Base directory for worktrees
+DEFAULT_BASE_DIR="../worktrees"
+
+# Default behavior for copying .gitignore'd files (optional)
+# DEFAULT_COPY_IGNORED=true
+```
+
+### Environment Variables
+
+```bash
+export GIT_WORK_MACHINE_BASE_DIR="../worktrees"
+export GIT_WORK_MACHINE_CONFIG="~/.git-work-machine.conf"
+```
+
+## Usage
+
+### Basic Commands
+
+```bash
+# Create worktree with auto-generated directory name
+git-work-machine add feature/new-feature
+# → Creates: ../worktrees/feature-new-feature
+
+# Create worktree with custom path
+git-work-machine add feature/new-feature -p ../my-feature
+
+# Create worktree without copying .gitignore'd files
+git-work-machine add hotfix/urgent --no-copy-ignored
+
+# List all worktrees
+git-work-machine list
+
+# Remove worktree
+git-work-machine remove ../worktrees/feature-new-feature
+
+# Force remove worktree (even with uncommitted changes)
+git-work-machine remove ../worktrees/feature-new-feature -f
+```
+
+### Advanced Options
+
+```bash
+# Override base directory for single command
+git-work-machine add feature/test -b /tmp/worktrees
+
+# Create worktree with custom base directory and path
+git-work-machine add feature/test -b ../projects -p custom-name
+```
+
+## Lazygit Integration
+
+Add to your lazygit config (`~/.config/lazygit/config.yml` or `~/Library/Application Support/lazygit/config.yml`):
+
+```yaml
+customCommands:
+  # Create worktree with .gitignore file copying
+  - key: 'W'
+    context: 'localBranches'
+    description: 'Create worktree (git-work-machine)'
+    prompts:
+      - type: 'input'
+        title: 'Enter worktree path (leave empty for auto):'
+        key: 'WorktreePath'
+        initialValue: ''
+    command: 'git-work-machine add {{.SelectedLocalBranch.Name}}{{if .Form.WorktreePath}} -p {{.Form.WorktreePath}}{{end}}'
+  
+  # Create worktree without .gitignore file copying
+  - key: 'w'
+    context: 'localBranches'
+    description: 'Create worktree (no .gitignore copy)'
+    prompts:
+      - type: 'input'
+        title: 'Enter worktree path (leave empty for auto):'
+        key: 'WorktreePath'
+        initialValue: ''
+    command: 'git-work-machine add {{.SelectedLocalBranch.Name}}{{if .Form.WorktreePath}} -p {{.Form.WorktreePath}}{{end}} --no-copy-ignored'
+  
+  # Create worktree from new branch
+  - key: 'N'
+    context: 'localBranches'
+    description: 'Create worktree with new branch'
+    prompts:
+      - type: 'input'
+        title: 'New branch name:'
+        key: 'BranchName'
+      - type: 'input'
+        title: 'Worktree path (leave empty for auto):'
+        key: 'WorktreePath'
+        initialValue: ''
+    command: 'git-work-machine add {{.Form.BranchName}}{{if .Form.WorktreePath}} -p {{.Form.WorktreePath}}{{end}}'
+  
+  # Remove worktree
+  - key: 'D'
+    context: 'worktrees'
+    description: 'Remove selected worktree'
+    prompts:
+      - type: 'confirm'
+        title: 'Remove worktree?'
+        body: 'Are you sure you want to remove worktree at {{.SelectedWorktree.Path}}?'
+    command: 'git-work-machine remove {{.SelectedWorktree.Path}}'
+  
+  # Force remove worktree
+  - key: 'X'
+    context: 'worktrees'
+    description: 'Force remove worktree'
+    prompts:
+      - type: 'confirm'
+        title: 'Force remove worktree?'
+        body: 'This will forcefully remove worktree at {{.SelectedWorktree.Path}} even if it has uncommitted changes!'
+    command: 'git-work-machine remove {{.SelectedWorktree.Path}} -f'
+```
+
+### Lazygit Usage
+
+1. Open lazygit in your repository
+2. Navigate to the branches panel
+3. Select a branch
+4. Press `W` to create a worktree with .gitignore file copying
+5. Press `w` to create a worktree without .gitignore file copying
+6. Navigate to the worktrees panel (`w` key) to manage existing worktrees
+
+## Examples
+
+### Typical Workflow
+
+```bash
+# Configure base directory
+echo 'DEFAULT_BASE_DIR="../worktrees"' > ~/.git-work-machine.conf
+
+# Create worktree for feature branch
+git-work-machine add feature/user-authentication
+# → Creates: ../worktrees/feature-user-authentication
+# → Copies: .env, .env.local, .vscode/, etc.
+
+# Create worktree for hotfix
+git-work-machine add hotfix/security-patch
+# → Creates: ../worktrees/hotfix-security-patch
+
+# List all worktrees
+git-work-machine list
+
+# Remove completed worktree
+git-work-machine remove ../worktrees/feature-user-authentication
+```
+
+### Directory Structure
+
+```
+project/
+├── .git/
+├── src/
+├── README.md
+└── worktrees/
+    ├── feature-user-authentication/
+    │   ├── .env              # Copied from main worktree
+    │   ├── .vscode/          # Copied from main worktree
+    │   └── src/
+    └── hotfix-security-patch/
+        ├── .env              # Copied from main worktree
+        └── src/
+```
+
+## Command Reference
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `add <branch>` | Create new worktree with auto-generated directory name |
+| `add <branch> -p <path>` | Create new worktree at specified path |
+| `list` | List all worktrees |
+| `remove <path>` | Remove worktree |
+| `remove <path> -f` | Force remove worktree |
+| `help` | Show help message |
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-p, --path <path>` | Specify custom path for worktree |
+| `-b, --base-dir <dir>` | Base directory for worktrees (overrides config) |
+| `-c, --copy-ignored` | Copy .gitignore'd files (default: true) |
+| `--no-copy-ignored` | Don't copy .gitignore'd files |
+| `-h, --help` | Show help |
+
+### Configuration
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `DEFAULT_BASE_DIR` | Base directory for worktrees | `""` (current directory) |
+| `DEFAULT_COPY_IGNORED` | Copy .gitignore'd files by default | `true` |
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `GIT_WORK_MACHINE_BASE_DIR` | Override base directory |
+| `GIT_WORK_MACHINE_CONFIG` | Path to config file |
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details
