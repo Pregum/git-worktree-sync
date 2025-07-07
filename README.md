@@ -22,12 +22,6 @@ Git worktreeの一般的な問題を解決する拡張管理ツール：
 
 ## Installation / インストール
 
-### Quick Install / クイックインストール
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Pregum/git-worktree-sync/main/install.sh | bash
-```
-
 ### Manual Install / 手動インストール
 
 ```bash
