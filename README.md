@@ -301,22 +301,89 @@ project/
 
 ## Performance Optimization / パフォーマンス最適化
 
-Version 1.1.0 introduces significant performance improvements for file copying:
-バージョン1.1.0では、ファイルコピーの大幅なパフォーマンス改善が導入されました：
+Version 1.2.0 introduces significant performance improvements for file copying:
+バージョン1.2.0では、ファイルコピーの大幅なパフォーマンス改善が導入されました：
 
-1. **rsync Support** - Uses rsync for faster bulk file operations / rsyncサポート - 高速な一括ファイル操作のためにrsyncを使用
-2. **Selective Copying** - Copy only necessary files using configuration / 選択的コピー - 設定を使用して必要なファイルのみをコピー
-3. **Depth-limited Search** - Limits find command depth for better performance / 深さ制限検索 - パフォーマンス向上のためにfindコマンドの深さを制限
+1. **Smart Default Exclusions** - Automatically excludes 60+ common large directory patterns / スマートなデフォルト除外 - 60以上の一般的な大容量ディレクトリパターンを自動除外
+2. **rsync Support** - Uses rsync for faster bulk file operations / rsyncサポート - 高速な一括ファイル操作のためにrsyncを使用
+3. **Selective Copying** - Copy only necessary files using configuration / 選択的コピー - 設定を使用して必要なファイルのみをコピー
+4. **Force Include Override** - Override exclusions with `!pattern` syntax / 強制インクルードによる上書き - `!pattern`構文で除外を上書き
+
+### Configuration Syntax / 設定構文
+
+```bash
+# Include patterns (default)
+.env
+.env.local
+
+# Explicit include
++.vscode/
+
+# Additional exclude
+-logs/
+
+# Force include (overrides default exclusions)
+!node_modules/package.json
+!dist/manifest.json
+```
 
 ### Tips for Large Projects / 大規模プロジェクトのためのヒント
 
 1. Create a `.git-worktree-sync-copy.conf` file to specify only essential files
-2. Exclude large directories like `node_modules/`, `.venv/`, `vendor/`
-3. Install rsync for optimal performance
+2. Large directories are excluded by default for performance
+3. Use `!pattern` to force include specific files from excluded directories
+4. Install rsync for optimal performance
 
 1. 必要なファイルのみを指定する`.git-worktree-sync-copy.conf`ファイルを作成
-2. `node_modules/`、`.venv/`、`vendor/`などの大きなディレクトリを除外
-3. 最適なパフォーマンスのためにrsyncをインストール
+2. パフォーマンスのため大容量ディレクトリはデフォルトで除外される
+3. 除外ディレクトリから特定ファイルを強制インクルードするには`!pattern`を使用
+4. 最適なパフォーマンスのためにrsyncをインストール
+
+## Testing / テスト
+
+This project includes a comprehensive test suite to ensure functionality and performance.
+
+### Quick Test / クイックテスト
+
+```bash
+cd test
+./quick-test.sh
+```
+
+### Full Test Suite / 完全テストスイート
+
+```bash
+cd test
+./setup.sh && ./run-tests.sh
+```
+
+### Test Coverage / テストカバレッジ
+
+The test suite covers:
+
+- **Basic Functionality**: Worktree creation, deletion, listing / 基本機能: ワークツリー作成、削除、一覧表示
+- **Configuration Options**: All copy configuration syntax / 設定オプション: 全コピー設定構文
+- **Performance Features**: Default exclusions, force includes / パフォーマンス機能: デフォルト除外、強制インクルード
+- **Error Handling**: Invalid inputs, edge cases / エラーハンドリング: 無効な入力、エッジケース
+- **Performance**: Large directory handling / パフォーマンス: 大容量ディレクトリ処理
+
+### Test Environment / テスト環境
+
+Tests create a realistic project environment with:
+
+- Multiple file types (env, config, IDE settings)
+- Large directories (node_modules, venv, dist, build)
+- Various branch types and naming patterns
+- Different configuration scenarios
+
+### Continuous Integration / 継続的インテグレーション
+
+[![CI](https://github.com/Pregum/git-worktree-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/Pregum/git-worktree-sync/actions/workflows/ci.yml)
+
+Tests run automatically on:
+- Push to main branch
+- Pull requests
+- Multiple operating systems (Linux, macOS)
 
 ## Contributing
 
