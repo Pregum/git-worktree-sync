@@ -3,13 +3,115 @@
 set -euo pipefail
 
 COMMAND_NAME="git-worktree-sync"
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 # Configuration
 CONFIG_FILE="${GIT_WORKTREE_SYNC_CONFIG:-$HOME/.git-worktree-sync.conf}"
 COPY_CONFIG_FILE="${GIT_WORKTREE_SYNC_COPY_CONFIG:-$HOME/.git-worktree-sync-copy.conf}"
 DEFAULT_BASE_DIR=""
 DEFAULT_COPY_IGNORED=true
+
+# Global arrays for config parsing
+declare -a config_includes=()
+declare -a config_excludes=()
+declare -a config_force_includes=()
+
+# Default exclude patterns for large directories commonly in .gitignore
+DEFAULT_EXCLUDE_PATTERNS=(
+    # Node.js
+    "node_modules/"
+    "bower_components/"
+    ".npm/"
+    ".yarn/"
+    ".pnp/"
+    ".pnp.js"
+    
+    # Python
+    "__pycache__/"
+    "*.py[cod]"
+    '*.pyc'
+    ".Python"
+    "venv/"
+    ".venv/"
+    "env/"
+    "ENV/"
+    ".env/"
+    "pip-log.txt"
+    "pip-delete-this-directory.txt"
+    ".tox/"
+    ".coverage"
+    ".coverage.*"
+    ".cache"
+    ".pytest_cache/"
+    ".mypy_cache/"
+    ".dmypy.json"
+    "dmypy.json"
+    "htmlcov/"
+    "dist/"
+    "build/"
+    "*.egg-info/"
+    ".eggs/"
+    
+    # Ruby
+    "vendor/bundle/"
+    "vendor/cache/"
+    ".bundle/"
+    
+    # Java
+    "target/"
+    "*.class"
+    ".gradle/"
+    "gradle/"
+    
+    # Go
+    "vendor/"
+    "bin/"
+    
+    # Rust
+    "target/"
+    "Cargo.lock"
+    
+    # PHP
+    "vendor/"
+    "composer.phar"
+    
+    # .NET
+    "bin/"
+    "obj/"
+    "packages/"
+    
+    # macOS
+    ".DS_Store"
+    
+    # IDEs
+    ".idea/"
+    "*.iml"
+    ".vscode-server/"
+    
+    # Build outputs
+    "dist/"
+    "build/"
+    "out/"
+    "_build/"
+    
+    # Logs
+    "*.log"
+    "logs/"
+    
+    # Temporary files
+    "*.tmp"
+    "*.temp"
+    ".tmp/"
+    "tmp/"
+    
+    # Large data files
+    "*.sqlite"
+    "*.db"
+    "*.sql"
+    
+    # Docker
+    ".docker/"
+)
 
 # Load configuration if exists
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -34,7 +136,7 @@ Commands:
 Options:
     -p, --path <path>      Specify custom path for worktree
     -b, --base-dir <dir>   Base directory for worktrees (overrides config)
-    -c, --copy-ignored     Copy .gitignore'd files from main worktree (default: true)
+    -c, --copy-ignored     Copy .gitignore'd files (default: true)
     --no-copy-ignored      Don't copy .gitignore'd files
     --copy-config <file>   Use custom copy configuration file
     -h, --help             Show help
@@ -46,6 +148,18 @@ Configuration:
         GIT_WORKTREE_SYNC_BASE_DIR - Base directory for worktrees
         GIT_WORKTREE_SYNC_CONFIG   - Path to config file
         GIT_WORKTREE_SYNC_COPY_CONFIG - Path to copy config file
+
+Copy Configuration Format:
+    # Include patterns (prefix with + or no prefix)
+    .env
+    .env.local
+    +.vscode/
+    
+    # Exclude patterns (prefix with -)
+    -node_modules/
+    
+    # Force include patterns (prefix with !)
+    !node_modules/package.json
 
 Examples:
     $COMMAND_NAME add feature/new-feature
@@ -76,6 +190,58 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Check if a pattern is in the exclude list
+is_excluded() {
+    local pattern="$1"
+    shift
+    local exclude_patterns=("$@")
+    
+    for exclude in "${exclude_patterns[@]}"; do
+        if [[ "$pattern" == "$exclude" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Parse copy configuration file - sets global arrays
+parse_copy_config() {
+    local config_file="$1"
+    
+    if [[ ! -f "$config_file" ]]; then
+        return
+    fi
+    
+    # Clear arrays
+    config_includes=()
+    config_excludes=()
+    config_force_includes=()
+    
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        
+        # Remove leading/trailing whitespace
+        line=$(echo "$line" | xargs)
+        
+        if [[ "$line" =~ ^! ]]; then
+            # Force include pattern
+            local pattern="${line#!}"
+            pattern=$(echo "$pattern" | xargs)  # trim whitespace
+            config_force_includes+=("$pattern")
+        elif [[ "$line" =~ ^- ]]; then
+            # Exclude pattern
+            config_excludes+=("${line#-}")
+        elif [[ "$line" =~ ^\+ ]]; then
+            # Explicit include pattern
+            config_includes+=("${line#+}")
+        else
+            # Default to include
+            config_includes+=("$line")
+        fi
+    done < "$config_file"
+}
+
 # Optimized copy function using rsync
 copy_gitignored_files_rsync() {
     local source_dir="$1"
@@ -91,23 +257,29 @@ copy_gitignored_files_rsync() {
         return
     fi
     
-    # Create include file for rsync
+    # Create temporary files for rsync
     local include_file=$(mktemp)
-    trap "rm -f $include_file" EXIT
+    local exclude_file=$(mktemp)
+    trap "rm -f $include_file $exclude_file" EXIT
     
-    # If copy config exists, use it; otherwise use .gitignore
+    # Initialize arrays
+    local include_patterns=()
+    local exclude_patterns=()
+    local force_include_patterns=()
+    
+    # Add default excludes
+    exclude_patterns+=("${DEFAULT_EXCLUDE_PATTERNS[@]}")
+    
+    # Parse copy configuration if exists
     if [[ -f "$copy_config" ]]; then
         info "Using copy configuration from: $copy_config"
-        # Read patterns from copy config
-        while IFS= read -r pattern; do
-            # Skip empty lines and comments
-            [[ -z "$pattern" || "$pattern" =~ ^# ]] && continue
-            # Remove leading/trailing whitespace
-            pattern=$(echo "$pattern" | xargs)
-            echo "$pattern" >> "$include_file"
-        done < "$copy_config"
+        parse_copy_config "$copy_config"
+        # Copy from global arrays
+        [[ ${#config_includes[@]} -gt 0 ]] && include_patterns+=("${config_includes[@]}")
+        [[ ${#config_excludes[@]} -gt 0 ]] && exclude_patterns+=("${config_excludes[@]}")
+        [[ ${#config_force_includes[@]} -gt 0 ]] && force_include_patterns+=("${config_force_includes[@]}")
     elif [[ -f "$source_dir/.gitignore" ]]; then
-        info "Using patterns from .gitignore"
+        info "Using patterns from .gitignore with default exclusions"
         # Read patterns from .gitignore
         while IFS= read -r pattern; do
             # Skip empty lines and comments
@@ -116,12 +288,32 @@ copy_gitignored_files_rsync() {
             pattern=$(echo "$pattern" | xargs)
             # Skip negation patterns
             [[ "$pattern" =~ ^! ]] && continue
-            echo "$pattern" >> "$include_file"
+            
+            # Check if pattern is in default excludes
+            if ! is_excluded "$pattern" "${exclude_patterns[@]}"; then
+                include_patterns+=("$pattern")
+            fi
         done < "$source_dir/.gitignore"
     else
         info "No copy configuration or .gitignore found"
         return
     fi
+    
+    # Write patterns to files
+    
+    for pattern in "${include_patterns[@]}"; do
+        echo "$pattern" >> "$include_file"
+    done
+    
+    if [[ ${#force_include_patterns[@]} -gt 0 ]]; then
+        for pattern in "${force_include_patterns[@]}"; do
+            echo "$pattern" >> "$include_file"
+        done
+    fi
+    
+    for pattern in "${exclude_patterns[@]}"; do
+        echo "$pattern" >> "$exclude_file"
+    done
     
     # If include file is empty, nothing to copy
     if [[ ! -s "$include_file" ]]; then
@@ -134,14 +326,16 @@ copy_gitignored_files_rsync() {
         cp "$source_dir/.gitignore" "$target_dir/" 2>/dev/null || true
     fi
     
-    # Use rsync with include patterns
+    # Use rsync with include/exclude patterns
     info "Copying files matching patterns..."
+    # rsync processes options in order - includes first, then excludes
     rsync -av \
-        --exclude=".git/" \
         --include-from="$include_file" \
         --include="*/" \
+        --exclude=".git/" \
+        --exclude-from="$exclude_file" \
         --exclude="*" \
-        "$source_dir/" "$target_dir/" 2>/dev/null || true
+        "$source_dir/" "$target_dir/" || true
 }
 
 # Standard copy function (fallback)
@@ -157,20 +351,24 @@ copy_gitignored_files_standard() {
         cp "$source_dir/.gitignore" "$target_dir/" 2>/dev/null || true
     fi
     
-    local patterns=()
+    # Initialize arrays
+    local include_patterns=()
+    local exclude_patterns=()
+    local force_include_patterns=()
     
-    # Load patterns
+    # Add default excludes
+    exclude_patterns+=("${DEFAULT_EXCLUDE_PATTERNS[@]}")
+    
+    # Parse copy configuration if exists
     if [[ -f "$copy_config" ]]; then
         info "Using copy configuration from: $copy_config"
-        while IFS= read -r pattern; do
-            # Skip empty lines and comments
-            [[ -z "$pattern" || "$pattern" =~ ^# ]] && continue
-            # Remove leading/trailing whitespace
-            pattern=$(echo "$pattern" | xargs)
-            patterns+=("$pattern")
-        done < "$copy_config"
+        parse_copy_config "$copy_config"
+        # Copy from global arrays
+        [[ ${#config_includes[@]} -gt 0 ]] && include_patterns+=("${config_includes[@]}")
+        [[ ${#config_excludes[@]} -gt 0 ]] && exclude_patterns+=("${config_excludes[@]}")
+        [[ ${#config_force_includes[@]} -gt 0 ]] && force_include_patterns+=("${config_force_includes[@]}")
     elif [[ -f "$source_dir/.gitignore" ]]; then
-        info "Using patterns from .gitignore"
+        info "Using patterns from .gitignore with default exclusions"
         while IFS= read -r pattern; do
             # Skip empty lines and comments
             [[ -z "$pattern" || "$pattern" =~ ^# ]] && continue
@@ -178,15 +376,27 @@ copy_gitignored_files_standard() {
             pattern=$(echo "$pattern" | xargs)
             # Skip negation patterns
             [[ "$pattern" =~ ^! ]] && continue
-            patterns+=("$pattern")
+            
+            # Check if pattern is in default excludes
+            if ! is_excluded "$pattern" "${exclude_patterns[@]}"; then
+                include_patterns+=("$pattern")
+            fi
         done < "$source_dir/.gitignore"
     else
         info "No copy configuration or .gitignore found"
         return
     fi
     
+    # Combine include and force include patterns
+    local all_patterns=("${include_patterns[@]}" "${force_include_patterns[@]}")
+    
     # Process each pattern
-    for pattern in "${patterns[@]}"; do
+    for pattern in "${all_patterns[@]}"; do
+        # Skip if pattern is in exclude list (unless it's a force include)
+        if is_excluded "$pattern" "${exclude_patterns[@]}" && ! is_excluded "$pattern" "${force_include_patterns[@]}"; then
+            continue
+        fi
+        
         if [[ "$pattern" =~ /$ ]]; then
             # Directory pattern
             pattern="${pattern%/}"
@@ -198,14 +408,26 @@ copy_gitignored_files_standard() {
             # File pattern - use find with limited depth for better performance
             while IFS= read -r -d '' file; do
                 relative_path="${file#$source_dir/}"
-                target_file="$target_dir/$relative_path"
-                target_file_dir=$(dirname "$target_file")
                 
-                # Create directory structure if needed
-                mkdir -p "$target_file_dir"
+                # Check if file matches any exclude pattern
+                local skip=false
+                for exclude in "${exclude_patterns[@]}"; do
+                    if [[ "$relative_path" == $exclude* ]] && ! is_excluded "$pattern" "${force_include_patterns[@]}"; then
+                        skip=true
+                        break
+                    fi
+                done
                 
-                info "Copying: $relative_path"
-                cp "$file" "$target_file" 2>/dev/null || true
+                if [[ "$skip" == false ]]; then
+                    target_file="$target_dir/$relative_path"
+                    target_file_dir=$(dirname "$target_file")
+                    
+                    # Create directory structure if needed
+                    mkdir -p "$target_file_dir"
+                    
+                    info "Copying: $relative_path"
+                    cp "$file" "$target_file" 2>/dev/null || true
+                fi
             done < <(find "$source_dir" -maxdepth 5 -path "$source_dir/.git" -prune -o -name "$pattern" -type f -print0)
         fi
     done

@@ -1,0 +1,52 @@
+# Git worktree sync copy configuration
+# Format:
+#   pattern      - Include pattern (default)
+#   +pattern     - Explicit include pattern
+#   -pattern     - Exclude pattern
+#   !pattern     - Force include pattern (overrides exclude)
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE settings
++.vscode/
++.idea/
+
+# Configuration files
+.npmrc
+.yarnrc
+.eslintrc*
+.prettierrc*
+tsconfig.json
+jest.config.*
+
+# Private keys (be careful!)
+# *.key
+# *.pem
+
+# Docker
+docker-compose.yml
+docker-compose.*.yml
+.dockerignore
+
+# === EXCLUDE PATTERNS (already excluded by default) ===
+# These patterns are excluded by default to improve performance.
+# You can force include them using ! prefix if needed.
+
+# Node.js (excluded by default)
+# -node_modules/
+# !node_modules/package.json  # Example: force include specific file
+
+# Python (excluded by default)
+# -venv/
+# -.venv/
+# -__pycache__/
+
+# If you want to INCLUDE node_modules (not recommended for large projects):
+# !node_modules/
+
+# If you want to include specific files from excluded directories:
+# !vendor/autoload.php
+# !node_modules/.bin/
