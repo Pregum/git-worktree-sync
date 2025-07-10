@@ -3,11 +3,13 @@
 set -euo pipefail
 
 COMMAND_NAME="git-worktree-sync"
-VERSION="1.0.0"
+VERSION="1.1.0"
 
 # Configuration
 CONFIG_FILE="${GIT_WORKTREE_SYNC_CONFIG:-$HOME/.git-worktree-sync.conf}"
+COPY_CONFIG_FILE="${GIT_WORKTREE_SYNC_COPY_CONFIG:-$HOME/.git-worktree-sync-copy.conf}"
 DEFAULT_BASE_DIR=""
+DEFAULT_COPY_IGNORED=true
 
 # Load configuration if exists
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -34,18 +36,22 @@ Options:
     -b, --base-dir <dir>   Base directory for worktrees (overrides config)
     -c, --copy-ignored     Copy .gitignore'd files from main worktree (default: true)
     --no-copy-ignored      Don't copy .gitignore'd files
+    --copy-config <file>   Use custom copy configuration file
     -h, --help             Show help
 
 Configuration:
     Config file: ~/.git-worktree-sync.conf
+    Copy config file: ~/.git-worktree-sync-copy.conf
     Environment variables:
         GIT_WORKTREE_SYNC_BASE_DIR - Base directory for worktrees
         GIT_WORKTREE_SYNC_CONFIG   - Path to config file
+        GIT_WORKTREE_SYNC_COPY_CONFIG - Path to copy config file
 
 Examples:
     $COMMAND_NAME add feature/new-feature
     $COMMAND_NAME add feature/new-feature -p ../my-feature
     $COMMAND_NAME add hotfix/urgent --no-copy-ignored
+    $COMMAND_NAME add feature/test --copy-config .worktree-copy.conf
     $COMMAND_NAME list
     $COMMAND_NAME remove ../my-feature
 
@@ -65,32 +71,122 @@ get_main_worktree() {
     git worktree list --porcelain | grep -E '^worktree ' | head -1 | cut -d' ' -f2-
 }
 
-copy_gitignored_files() {
+# Check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Optimized copy function using rsync
+copy_gitignored_files_rsync() {
     local source_dir="$1"
     local target_dir="$2"
+    local copy_config="$3"
     
-    if [[ ! -f "$source_dir/.gitignore" ]]; then
-        info "No .gitignore file found in source directory"
+    info "Using optimized rsync method for copying files"
+    
+    # Check if rsync is available
+    if ! command_exists rsync; then
+        info "rsync not found, falling back to standard copy method"
+        copy_gitignored_files_standard "$source_dir" "$target_dir" "$copy_config"
         return
     fi
     
-    info "Copying .gitignore'd files from $source_dir to $target_dir"
+    # Create include file for rsync
+    local include_file=$(mktemp)
+    trap "rm -f $include_file" EXIT
     
-    # First, copy the .gitignore file itself
-    cp "$source_dir/.gitignore" "$target_dir/" 2>/dev/null || true
+    # If copy config exists, use it; otherwise use .gitignore
+    if [[ -f "$copy_config" ]]; then
+        info "Using copy configuration from: $copy_config"
+        # Read patterns from copy config
+        while IFS= read -r pattern; do
+            # Skip empty lines and comments
+            [[ -z "$pattern" || "$pattern" =~ ^# ]] && continue
+            # Remove leading/trailing whitespace
+            pattern=$(echo "$pattern" | xargs)
+            echo "$pattern" >> "$include_file"
+        done < "$copy_config"
+    elif [[ -f "$source_dir/.gitignore" ]]; then
+        info "Using patterns from .gitignore"
+        # Read patterns from .gitignore
+        while IFS= read -r pattern; do
+            # Skip empty lines and comments
+            [[ -z "$pattern" || "$pattern" =~ ^# ]] && continue
+            # Remove leading/trailing whitespace
+            pattern=$(echo "$pattern" | xargs)
+            # Skip negation patterns
+            [[ "$pattern" =~ ^! ]] && continue
+            echo "$pattern" >> "$include_file"
+        done < "$source_dir/.gitignore"
+    else
+        info "No copy configuration or .gitignore found"
+        return
+    fi
     
-    # Read .gitignore patterns and copy matching files
-    while IFS= read -r pattern; do
-        # Skip empty lines and comments
-        [[ -z "$pattern" || "$pattern" =~ ^# ]] && continue
-        
-        # Remove leading/trailing whitespace
-        pattern=$(echo "$pattern" | xargs)
-        
-        # Skip negation patterns
-        [[ "$pattern" =~ ^! ]] && continue
-        
-        # Handle patterns
+    # If include file is empty, nothing to copy
+    if [[ ! -s "$include_file" ]]; then
+        info "No patterns to copy"
+        return
+    fi
+    
+    # Always copy .gitignore itself
+    if [[ -f "$source_dir/.gitignore" ]]; then
+        cp "$source_dir/.gitignore" "$target_dir/" 2>/dev/null || true
+    fi
+    
+    # Use rsync with include patterns
+    info "Copying files matching patterns..."
+    rsync -av \
+        --exclude=".git/" \
+        --include-from="$include_file" \
+        --include="*/" \
+        --exclude="*" \
+        "$source_dir/" "$target_dir/" 2>/dev/null || true
+}
+
+# Standard copy function (fallback)
+copy_gitignored_files_standard() {
+    local source_dir="$1"
+    local target_dir="$2"
+    local copy_config="$3"
+    
+    info "Using standard copy method"
+    
+    # Always copy .gitignore itself
+    if [[ -f "$source_dir/.gitignore" ]]; then
+        cp "$source_dir/.gitignore" "$target_dir/" 2>/dev/null || true
+    fi
+    
+    local patterns=()
+    
+    # Load patterns
+    if [[ -f "$copy_config" ]]; then
+        info "Using copy configuration from: $copy_config"
+        while IFS= read -r pattern; do
+            # Skip empty lines and comments
+            [[ -z "$pattern" || "$pattern" =~ ^# ]] && continue
+            # Remove leading/trailing whitespace
+            pattern=$(echo "$pattern" | xargs)
+            patterns+=("$pattern")
+        done < "$copy_config"
+    elif [[ -f "$source_dir/.gitignore" ]]; then
+        info "Using patterns from .gitignore"
+        while IFS= read -r pattern; do
+            # Skip empty lines and comments
+            [[ -z "$pattern" || "$pattern" =~ ^# ]] && continue
+            # Remove leading/trailing whitespace
+            pattern=$(echo "$pattern" | xargs)
+            # Skip negation patterns
+            [[ "$pattern" =~ ^! ]] && continue
+            patterns+=("$pattern")
+        done < "$source_dir/.gitignore"
+    else
+        info "No copy configuration or .gitignore found"
+        return
+    fi
+    
+    # Process each pattern
+    for pattern in "${patterns[@]}"; do
         if [[ "$pattern" =~ /$ ]]; then
             # Directory pattern
             pattern="${pattern%/}"
@@ -99,8 +195,7 @@ copy_gitignored_files() {
                 cp -r "$source_dir/$pattern" "$target_dir/" 2>/dev/null || true
             fi
         else
-            # File or wildcard pattern
-            # Use find to handle wildcards
+            # File pattern - use find with limited depth for better performance
             while IFS= read -r -d '' file; do
                 relative_path="${file#$source_dir/}"
                 target_file="$target_dir/$relative_path"
@@ -111,9 +206,9 @@ copy_gitignored_files() {
                 
                 info "Copying: $relative_path"
                 cp "$file" "$target_file" 2>/dev/null || true
-            done < <(find "$source_dir" -path "$source_dir/.git" -prune -o -name "$pattern" -type f -print0)
+            done < <(find "$source_dir" -maxdepth 5 -path "$source_dir/.git" -prune -o -name "$pattern" -type f -print0)
         fi
-    done < "$source_dir/.gitignore"
+    done
 }
 
 add_worktree() {
@@ -121,6 +216,7 @@ add_worktree() {
     local path=""
     local copy_ignored=true
     local custom_base_dir=""
+    local custom_copy_config=""
     
     # Parse additional arguments
     shift
@@ -142,6 +238,10 @@ add_worktree() {
                 copy_ignored=false
                 shift
                 ;;
+            --copy-config)
+                custom_copy_config="$2"
+                shift 2
+                ;;
             *)
                 error "Unknown option: $1"
                 ;;
@@ -150,6 +250,15 @@ add_worktree() {
     
     # Determine base directory
     local effective_base_dir="${custom_base_dir:-$BASE_DIR}"
+    
+    # Determine copy config file
+    local effective_copy_config="${custom_copy_config:-$COPY_CONFIG_FILE}"
+    
+    # Look for project-specific copy config
+    if [[ -z "$custom_copy_config" && -f ".git-worktree-sync-copy.conf" ]]; then
+        effective_copy_config=".git-worktree-sync-copy.conf"
+        info "Found project-specific copy configuration"
+    fi
     
     # If no path specified, use branch name as directory
     if [[ -z "$path" ]]; then
@@ -190,7 +299,7 @@ add_worktree() {
     # Copy gitignored files if requested
     if [[ "$copy_ignored" == true ]]; then
         local main_worktree=$(get_main_worktree)
-        copy_gitignored_files "$main_worktree" "$path"
+        copy_gitignored_files_rsync "$main_worktree" "$path" "$effective_copy_config"
     fi
     
     echo "Successfully created worktree at '$path' for branch '$branch'"
