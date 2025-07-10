@@ -378,7 +378,7 @@ Tests create a realistic project environment with:
 
 ### Continuous Integration / 継続的インテグレーション
 
-[![CI](https://github.com/Pregum/git-worktree-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/Pregum/git-worktree-sync/actions/workflows/ci.yml)
+[![Tests](https://github.com/Pregum/git-worktree-sync/actions/workflows/badge-test.yml/badge.svg)](https://github.com/Pregum/git-worktree-sync/actions/workflows/badge-test.yml)
 
 Tests run automatically on:
 - Push to main branch

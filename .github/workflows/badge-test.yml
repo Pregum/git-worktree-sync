@@ -1,0 +1,29 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Git
+      run: |
+        git config --global user.name "Test"
+        git config --global user.email "test@example.com"
+        
+    - name: Make executable
+      run: chmod +x git-worktree-sync test/*.sh
+        
+    - name: Quick test
+      run: cd test && ./quick-test.sh
