@@ -17,6 +17,8 @@ Git worktreeの一般的な問題を解決する拡張管理ツール：
 - 🚀 **Auto-generated directory names** from branch names / ブランチ名からディレクトリ名を自動生成
 - 📁 **Configurable base directory** for organized worktree management / 整理されたworktree管理のための設定可能なベースディレクトリ
 - 🔄 **Automatic .gitignore file copying** (.env, .vscode, etc.) / .gitignoreファイルの自動コピー（.env、.vscodeなど）
+- ⚡ **Optimized file copying** with rsync support / rsyncサポートによる最適化されたファイルコピー
+- 📋 **Selective file copying** via configuration file / 設定ファイルによる選択的ファイルコピー
 - ⚡ **Seamless lazygit integration** / シームレスなlazygit統合
 - 🛠️ **Flexible configuration** via config file or environment variables / 設定ファイルや環境変数による柔軟な設定
 
@@ -62,11 +64,35 @@ DEFAULT_BASE_DIR="../worktrees"
 # DEFAULT_COPY_IGNORED=true
 ```
 
+### Copy Configuration File / コピー設定ファイル
+
+Create `~/.git-worktree-sync-copy.conf` or `.git-worktree-sync-copy.conf` in your project:
+プロジェクトに`~/.git-worktree-sync-copy.conf`または`.git-worktree-sync-copy.conf`を作成：
+
+```bash
+# Files and directories to copy to new worktrees
+# 新しいworktreeにコピーするファイルとディレクトリ
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE settings
+.vscode/
+
+# Exclude large directories by commenting them out
+# 大きなディレクトリはコメントアウトして除外
+# node_modules/
+# .venv/
+```
+
 ### Environment Variables / 環境変数
 
 ```bash
 export GIT_WORKTREE_SYNC_BASE_DIR="../worktrees"
 export GIT_WORKTREE_SYNC_CONFIG="~/.git-worktree-sync.conf"
+export GIT_WORKTREE_SYNC_COPY_CONFIG="~/.git-worktree-sync-copy.conf"
 ```
 
 ## Usage / 使い方
@@ -110,6 +136,10 @@ git-worktree-sync add feature/test -b /tmp/worktrees
 # Create worktree with custom base directory and path
 # カスタムベースディレクトリとパスでworktreeを作成
 git-worktree-sync add feature/test -b ../projects -p custom-name
+
+# Use custom copy configuration file
+# カスタムコピー設定ファイルを使用
+git-worktree-sync add feature/test --copy-config .worktree-copy.conf
 ```
 
 ## Lazygit Integration
@@ -251,6 +281,7 @@ project/
 | `-b, --base-dir <dir>` | Base directory for worktrees (overrides config) | worktreeのベースディレクトリ（設定を上書き） |
 | `-c, --copy-ignored` | Copy .gitignore'd files (default: true) | .gitignoreファイルをコピー（デフォルト: true） |
 | `--no-copy-ignored` | Don't copy .gitignore'd files | .gitignoreファイルをコピーしない |
+| `--copy-config <file>` | Use custom copy configuration file | カスタムコピー設定ファイルを使用 |
 | `-h, --help` | Show help | ヘルプを表示 |
 
 ### Configuration / 設定
@@ -266,6 +297,26 @@ project/
 |----------|-------------|------|
 | `GIT_WORKTREE_SYNC_BASE_DIR` | Override base directory | ベースディレクトリを上書き |
 | `GIT_WORKTREE_SYNC_CONFIG` | Path to config file | 設定ファイルのパス |
+| `GIT_WORKTREE_SYNC_COPY_CONFIG` | Path to copy configuration file | コピー設定ファイルのパス |
+
+## Performance Optimization / パフォーマンス最適化
+
+Version 1.1.0 introduces significant performance improvements for file copying:
+バージョン1.1.0では、ファイルコピーの大幅なパフォーマンス改善が導入されました：
+
+1. **rsync Support** - Uses rsync for faster bulk file operations / rsyncサポート - 高速な一括ファイル操作のためにrsyncを使用
+2. **Selective Copying** - Copy only necessary files using configuration / 選択的コピー - 設定を使用して必要なファイルのみをコピー
+3. **Depth-limited Search** - Limits find command depth for better performance / 深さ制限検索 - パフォーマンス向上のためにfindコマンドの深さを制限
+
+### Tips for Large Projects / 大規模プロジェクトのためのヒント
+
+1. Create a `.git-worktree-sync-copy.conf` file to specify only essential files
+2. Exclude large directories like `node_modules/`, `.venv/`, `vendor/`
+3. Install rsync for optimal performance
+
+1. 必要なファイルのみを指定する`.git-worktree-sync-copy.conf`ファイルを作成
+2. `node_modules/`、`.venv/`、`vendor/`などの大きなディレクトリを除外
+3. 最適なパフォーマンスのためにrsyncをインストール
 
 ## Contributing
 
