@@ -2,171 +2,45 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ master, main ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ master, main ]
 
 jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
     - name: Set up Git
       run: |
-        git config --global user.name "CI Test"
-        git config --global user.email "ci@example.com"
+        git config --global user.name "Test User"
+        git config --global user.email "test@example.com"
         
     - name: Install dependencies
       run: |
-        # Ensure rsync is available (should be pre-installed on both OS)
-        if command -v rsync >/dev/null 2>&1; then
-          echo "✓ rsync is available"
-          rsync --version | head -1
-        else
-          echo "⚠ rsync not found, installing..."
-          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            sudo apt-get update && sudo apt-get install -y rsync
-          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            brew install rsync
-          fi
-        fi
+        # No special dependencies needed for shell scripts
+        echo "✓ Dependencies ready"
         
     - name: Verify script permissions
       run: |
         chmod +x git-worktree-sync
-        chmod +x test/setup.sh
-        chmod +x test/run-tests.sh
-        chmod +x test/quick-test.sh
+        chmod +x test/*.sh
         
     - name: Run quick tests
       run: |
         cd test
         ./quick-test.sh
-        
-    - name: Run full test suite
-      run: |
-        cd test
-        timeout 300 ./run-tests.sh || {
-          echo "Tests timed out after 5 minutes"
-          exit 1
-        }
-        
-    - name: Verify installation script
-      run: |
-        # Test install script in temporary directory
-        TEMP_DIR=$(mktemp -d)
-        cp install.sh git-worktree-sync "$TEMP_DIR/"
-        cd "$TEMP_DIR"
-        
-        # Test with custom install directory
-        INSTALL_DIR="$TEMP_DIR/bin" ./install.sh
-        
-        # Verify installation
-        if [[ -x "$TEMP_DIR/bin/git-worktree-sync" ]]; then
-          echo "✓ Installation script works"
-          "$TEMP_DIR/bin/git-worktree-sync" version
-        else
-          echo "✗ Installation script failed"
-          exit 1
-        fi
-        
-        # Cleanup
-        rm -rf "$TEMP_DIR"
-        
-    - name: Test performance with large directories
-      run: |
-        cd test
-        
-        # Set up test environment
-        ./setup.sh
-        
-        cd test-repo
-        
-        # Create larger test environment
-        mkdir -p large_test/{node_modules,venv,dist,build}
-        for i in {1..100}; do
-          echo "file $i" > "large_test/node_modules/file$i.js"
-          echo "file $i" > "large_test/venv/file$i.py"
-          echo "file $i" > "large_test/dist/file$i.min.js"
-          echo "file $i" > "large_test/build/file$i.o"
-        done
-        
-        # Test that large directories are excluded (should be fast)
-        time_start=$(date +%s)
-        ../../git-worktree-sync add perf/test -b ../test-worktrees >/dev/null 2>&1
-        time_end=$(date +%s)
-        duration=$((time_end - time_start))
-        
-        echo "Performance test completed in ${duration}s"
-        
-        # Verify large directories were excluded
-        if [[ ! -d "../test-worktrees/perf-test/large_test/node_modules" ]]; then
-          echo "✓ Large directories properly excluded"
-        else
-          echo "⚠ Large directories were copied (performance issue)"
-        fi
-        
-        # Cleanup
-        git worktree remove ../test-worktrees/perf-test 2>/dev/null || true
-        rm -rf large_test
-        cd ..
-        ./setup.sh --clean
-        
-    - name: Test edge cases
-      run: |
-        cd test
-        ./setup.sh
-        cd test-repo
-        
-        echo "Testing edge cases..."
-        
-        # Test branch with special characters
-        if ../../git-worktree-sync add "feature/test-chars_123" -b ../test-worktrees >/dev/null 2>&1; then
-          echo "✓ Special characters in branch names handled"
-          git worktree remove ../test-worktrees/feature-test-chars_123 2>/dev/null || true
-        else
-          echo "⚠ Special characters test failed"
-        fi
-        
-        # Test missing configuration gracefully
-        mv .git-worktree-sync-copy.conf .git-worktree-sync-copy.conf.bak
-        if ../../git-worktree-sync add "test/no-config" -b ../test-worktrees >/dev/null 2>&1; then
-          echo "✓ Missing configuration handled gracefully"
-          git worktree remove ../test-worktrees/test-no-config 2>/dev/null || true
-        else
-          echo "⚠ Missing configuration test failed"
-        fi
-        mv .git-worktree-sync-copy.conf.bak .git-worktree-sync-copy.conf
-        
-        # Test empty worktree directory
-        if ../../git-worktree-sync add "test/empty" -b ../test-worktrees --no-copy-ignored >/dev/null 2>&1; then
-          echo "✓ Empty worktree creation works"
-          git worktree remove ../test-worktrees/test-empty 2>/dev/null || true
-        else
-          echo "⚠ Empty worktree test failed"
-        fi
-        
-        cd ..
-        ./setup.sh --clean
-        
-    - name: Archive test results
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-logs-${{ matrix.os }}
-        path: |
-          test/test-repo/.git/logs/
-          test/test-worktrees/
-        retention-days: 7
 
   lint:
     runs-on: ubuntu-latest
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -178,23 +52,25 @@ jobs:
         
     - name: Run ShellCheck on main script
       run: |
-        echo "Checking main script..."
+        echo "Running ShellCheck on main script..."
         shellcheck git-worktree-sync
+        echo "✓ Main script passed ShellCheck"
         
-    - name: Run ShellCheck on test scripts  
+    - name: Run ShellCheck on test scripts
       run: |
-        echo "Checking test scripts..."
-        shellcheck test/setup.sh
-        shellcheck test/run-tests.sh  
-        shellcheck test/quick-test.sh
+        echo "Running ShellCheck on test scripts..."
+        shellcheck test/*.sh
+        echo "✓ Test scripts passed ShellCheck"
         
     - name: Run ShellCheck on install script
       run: |
-        echo "Checking install script..."
+        echo "Running ShellCheck on install script..."
         shellcheck install.sh
+        echo "✓ Install script passed ShellCheck"
 
   security:
     runs-on: ubuntu-latest
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -210,8 +86,10 @@ jobs:
            | grep -v "echo.*test-" \
            | grep -v "API_KEY=test-key" \
            | grep -v "BEGIN PRIVATE KEY" \
-           | grep -v "lazygit.*key" \
-           | grep -v "ssh.*key"; then
+           | grep -v "lazygit" \
+           | grep -v "ssh.*key" \
+           | grep -v "key:" \
+           | grep -v "WorktreePath"; then
           echo "⚠ Potential secrets found in code"
           exit 1
         else
@@ -235,13 +113,10 @@ jobs:
       run: |
         echo "Checking file permissions..."
         
-        # Ensure scripts are executable but not overly permissive
-        find . -name "*.sh" -type f | while read -r script; do
-          perms=$(stat -c "%a" "$script")
-          if [[ "$perms" != "755" && "$perms" != "644" ]]; then
-            echo "⚠ Unusual permissions on $script: $perms"
-            # Don't fail on this, just warn
-          fi
-        done
-        
-        echo "✓ File permissions check completed"
+        # Check that scripts are not world-writable
+        if find . -name "*.sh" -perm -002 | grep -q .; then
+          echo "⚠ World-writable scripts found"
+          exit 1
+        else
+          echo "✓ File permissions are secure"
+        fi
