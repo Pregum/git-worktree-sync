@@ -115,6 +115,7 @@ DEFAULT_EXCLUDE_PATTERNS=(
 
 # Load configuration if exists
 if [[ -f "$CONFIG_FILE" ]]; then
+    # shellcheck source=/dev/null
     source "$CONFIG_FILE"
 fi
 

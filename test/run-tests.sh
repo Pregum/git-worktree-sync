@@ -142,8 +142,10 @@ test_new_branch_creation() {
     log "Testing new branch creation..."
     setup_test
     
-    local branch_name="test/new-branch-$(date +%s)"
-    local worktree_path="$WORKTREE_BASE/test-new-branch-$(date +%s)"
+    local branch_name
+    local worktree_path
+    branch_name="test/new-branch-$(date +%s)"
+    worktree_path="$WORKTREE_BASE/test-new-branch-$(date +%s)"
     
     if "$GIT_WORKTREE_SYNC" add "$branch_name" -b "$WORKTREE_BASE" >/dev/null 2>&1; then
         if assert_worktree_exists "$worktree_path" "new branch creation" &&
@@ -370,7 +372,8 @@ test_invalid_branch() {
 test_missing_git_repo() {
     log "Testing behavior outside git repository..."
     
-    local temp_dir=$(mktemp -d)
+    local temp_dir
+    temp_dir=$(mktemp -d)
     cd "$temp_dir"
     
     if ! "$GIT_WORKTREE_SYNC" add test/branch >/dev/null 2>&1; then
@@ -415,9 +418,11 @@ test_large_directory_performance() {
         echo "module $i" > "large_node_modules/package3/lib/file$i.js"
     done
     
-    local start_time=$(date +%s%N)
+    local start_time
+    local end_time
+    start_time=$(date +%s%N)
     "$GIT_WORKTREE_SYNC" add feature/test-feature -b "$WORKTREE_BASE" >/dev/null 2>&1
-    local end_time=$(date +%s%N)
+    end_time=$(date +%s%N)
     
     local duration=$(( (end_time - start_time) / 1000000 )) # Convert to milliseconds
     
