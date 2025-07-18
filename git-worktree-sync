@@ -9,7 +9,7 @@ VERSION="1.2.0"
 CONFIG_FILE="${GIT_WORKTREE_SYNC_CONFIG:-$HOME/.git-worktree-sync.conf}"
 COPY_CONFIG_FILE="${GIT_WORKTREE_SYNC_COPY_CONFIG:-$HOME/.git-worktree-sync-copy.conf}"
 DEFAULT_BASE_DIR=""
-DEFAULT_COPY_IGNORED=true
+# DEFAULT_COPY_IGNORED=true  # Used in config files
 
 # Global arrays for config parsing
 declare -a config_includes=()
@@ -115,6 +115,7 @@ DEFAULT_EXCLUDE_PATTERNS=(
 
 # Load configuration if exists
 if [[ -f "$CONFIG_FILE" ]]; then
+    # shellcheck source=/dev/null
     source "$CONFIG_FILE"
 fi
 
@@ -231,10 +232,14 @@ parse_copy_config() {
             config_force_includes+=("$pattern")
         elif [[ "$line" =~ ^- ]]; then
             # Exclude pattern
-            config_excludes+=("${line#-}")
+            local pattern="${line#-}"
+            pattern=$(echo "$pattern" | xargs)  # trim whitespace
+            config_excludes+=("$pattern")
         elif [[ "$line" =~ ^\+ ]]; then
             # Explicit include pattern
-            config_includes+=("${line#+}")
+            local pattern="${line#+}"
+            pattern=$(echo "$pattern" | xargs)  # trim whitespace
+            config_includes+=("$pattern")
         else
             # Default to include
             config_includes+=("$line")
@@ -258,9 +263,19 @@ copy_gitignored_files_rsync() {
     fi
     
     # Create temporary files for rsync
-    local include_file=$(mktemp)
-    local exclude_file=$(mktemp)
-    trap "rm -f $include_file $exclude_file" EXIT
+    local include_file
+    local exclude_file
+    include_file=$(mktemp) || return 1
+    exclude_file=$(mktemp) || return 1
+    
+    # Store file paths in global variables for cleanup
+    _temp_include_file="$include_file"
+    _temp_exclude_file="$exclude_file"
+    
+    cleanup_temp_files() {
+        rm -f "$_temp_include_file" "$_temp_exclude_file" "$_temp_exclude_file_filtered" 2>/dev/null || true
+    }
+    trap cleanup_temp_files EXIT
     
     # Initialize arrays
     local include_patterns=()
@@ -303,11 +318,19 @@ copy_gitignored_files_rsync() {
     
     for pattern in "${include_patterns[@]}"; do
         echo "$pattern" >> "$include_file"
+        # For directories, also include their contents
+        if [[ "$pattern" =~ /$ ]]; then
+            echo "${pattern}**" >> "$include_file"
+        fi
     done
     
     if [[ ${#force_include_patterns[@]} -gt 0 ]]; then
         for pattern in "${force_include_patterns[@]}"; do
             echo "$pattern" >> "$include_file"
+            # For directories, also include their contents
+            if [[ "$pattern" =~ /$ ]]; then
+                echo "${pattern}**" >> "$include_file"
+            fi
         done
     fi
     
@@ -328,12 +351,32 @@ copy_gitignored_files_rsync() {
     
     # Use rsync with include/exclude patterns
     info "Copying files matching patterns..."
-    # rsync processes options in order - includes first, then excludes
+    # Create a modified exclude file without force-included patterns
+    local exclude_file_filtered
+    exclude_file_filtered=$(mktemp) || return 1
+    _temp_exclude_file_filtered="$exclude_file_filtered"
+    
+    while IFS= read -r exclude_pattern; do
+        local should_exclude=true
+        # Check if this pattern is force-included
+        if [[ ${#force_include_patterns[@]} -gt 0 ]]; then
+            for force_pattern in "${force_include_patterns[@]}"; do
+                if [[ "$exclude_pattern" == "$force_pattern" ]]; then
+                    should_exclude=false
+                    break
+                fi
+            done
+        fi
+        if [[ "$should_exclude" == true ]]; then
+            echo "$exclude_pattern" >> "$exclude_file_filtered"
+        fi
+    done < "$exclude_file"
+    
+    # rsync: exclude first, then include specific patterns
     rsync -av \
-        --include-from="$include_file" \
-        --include="*/" \
         --exclude=".git/" \
-        --exclude-from="$exclude_file" \
+        --exclude-from="$exclude_file_filtered" \
+        --include-from="$include_file" \
         --exclude="*" \
         "$source_dir/" "$target_dir/" || true
 }
@@ -407,7 +450,7 @@ copy_gitignored_files_standard() {
         else
             # File pattern - use find with limited depth for better performance
             while IFS= read -r -d '' file; do
-                relative_path="${file#$source_dir/}"
+                relative_path="${file#"$source_dir"/}"
                 
                 # Check if file matches any exclude pattern
                 local skip=false
@@ -486,7 +529,8 @@ add_worktree() {
     if [[ -z "$path" ]]; then
         # Convert branch name to directory name
         # Replace / with - and remove any special characters
-        local dir_name=$(echo "$branch" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9_-]||g')
+        local dir_name
+        dir_name=$(echo "$branch" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9_-]||g')
         
         # Apply base directory if configured
         if [[ -n "$effective_base_dir" ]]; then
@@ -520,8 +564,9 @@ add_worktree() {
     
     # Copy gitignored files if requested
     if [[ "$copy_ignored" == true ]]; then
-        local main_worktree=$(get_main_worktree)
-        copy_gitignored_files_rsync "$main_worktree" "$path" "$effective_copy_config"
+        local main_worktree
+        main_worktree=$(get_main_worktree)
+        copy_gitignored_files_rsync "$main_worktree" "$path" "$effective_copy_config" || true
     fi
     
     echo "Successfully created worktree at '$path' for branch '$branch'"

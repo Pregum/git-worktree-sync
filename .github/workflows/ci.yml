@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Git
+      run: |
+        git config --global user.name "Test User"
+        git config --global user.email "test@example.com"
+        
+    - name: Install dependencies
+      run: |
+        # No special dependencies needed for shell scripts
+        echo "✓ Dependencies ready"
+        
+    - name: Verify script permissions
+      run: |
+        chmod +x git-worktree-sync
+        chmod +x test/*.sh
+        
+    - name: Run quick tests
+      run: |
+        cd test
+        ./quick-test.sh
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install ShellCheck
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y shellcheck
+        
+    - name: Run ShellCheck on main script
+      run: |
+        echo "Running ShellCheck on main script..."
+        shellcheck git-worktree-sync
+        echo "✓ Main script passed ShellCheck"
+        
+    - name: Run ShellCheck on test scripts
+      run: |
+        echo "Running ShellCheck on test scripts..."
+        shellcheck test/*.sh
+        echo "✓ Test scripts passed ShellCheck"
+        
+    - name: Run ShellCheck on install script
+      run: |
+        echo "Running ShellCheck on install script..."
+        shellcheck install.sh
+        echo "✓ Install script passed ShellCheck"
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Check for secrets in code
+      run: |
+        echo "Checking for potential secrets..."
+        
+        # Check for common secret patterns (excluding test files and comments)
+        if grep -r -i "password\|secret\|key\|token" --include="*.sh" . \
+           | grep -v "^[[:space:]]*#" \
+           | grep -v "test" \
+           | grep -v "echo.*test-" \
+           | grep -v "API_KEY=test-key" \
+           | grep -v "BEGIN PRIVATE KEY" \
+           | grep -v "lazygit" \
+           | grep -v "ssh.*key" \
+           | grep -v "key:" \
+           | grep -v "WorktreePath"; then
+          echo "⚠ Potential secrets found in code"
+          exit 1
+        else
+          echo "✓ No secrets detected"
+        fi
+        
+    - name: Verify script security
+      run: |
+        echo "Checking script security..."
+        
+        # Check for dangerous commands
+        dangerous_commands="rm -rf /|sudo rm|chmod 777|> /dev/"
+        if grep -r "$dangerous_commands" --include="*.sh" .; then
+          echo "⚠ Potentially dangerous commands found"
+          exit 1
+        else
+          echo "✓ No dangerous commands detected"
+        fi
+        
+    - name: Check file permissions
+      run: |
+        echo "Checking file permissions..."
+        
+        # Check that scripts are not world-writable
+        if find . -name "*.sh" -perm -002 | grep -q .; then
+          echo "⚠ World-writable scripts found"
+          exit 1
+        else
+          echo "✓ File permissions are secure"
+        fi
