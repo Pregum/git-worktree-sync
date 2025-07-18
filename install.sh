@@ -20,12 +20,12 @@ fi
 cp -f "$SCRIPT_DIR/$COMMAND_NAME" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/$COMMAND_NAME"
 
-# Create config file if it doesn't exist
+# Create config file if it doesn't exist (optional)
 CONFIG_FILE="$HOME/.git-worktree-sync.conf"
 if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "Creating default configuration file at $CONFIG_FILE"
-    cp "$SCRIPT_DIR/.git-worktree-sync.conf.example" "$CONFIG_FILE"
-    echo "Please edit $CONFIG_FILE to customize your settings"
+    echo ""
+    echo "Note: You can optionally create a configuration file at $CONFIG_FILE"
+    echo "See the README for configuration options."
 fi
 
 # Check if install directory is in PATH

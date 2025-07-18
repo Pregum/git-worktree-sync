@@ -24,7 +24,29 @@ Git worktreeの一般的な問題を解決する拡張管理ツール：
 
 ## Installation / インストール
 
-### Manual Install / 手動インストール
+### Method 1: Clone and Add to PATH (Recommended) / 方法1: クローンしてPATHに追加（推奨）
+
+Simply clone the repository and add it to your PATH:
+リポジトリをクローンしてPATHに追加するだけです：
+
+```bash
+git clone https://github.com/Pregum/git-worktree-sync.git ~/git-worktree-sync
+echo 'export PATH="$PATH:$HOME/git-worktree-sync"' >> ~/.bashrc  # or ~/.zshrc
+source ~/.bashrc  # or source ~/.zshrc
+```
+
+This method allows you to easily update by pulling the latest changes:
+この方法では、最新の変更をプルして簡単に更新できます：
+
+```bash
+cd ~/git-worktree-sync
+git pull
+```
+
+### Method 2: Traditional Install / 方法2: 従来のインストール
+
+Use the install script to copy the executable to a system directory:
+インストールスクリプトを使用して実行ファイルをシステムディレクトリにコピーします：
 
 ```bash
 git clone https://github.com/Pregum/git-worktree-sync.git
@@ -49,10 +71,13 @@ export PATH="$PATH:$HOME/bin"
 
 ## Configuration / 設定
 
-### Config File / 設定ファイル
+**Note:** Configuration files are optional. The tool works with sensible defaults out of the box.
+**注意:** 設定ファイルは任意です。このツールはデフォルト設定でそのまま動作します。
 
-Create `~/.git-worktree-sync.conf`:
-`~/.git-worktree-sync.conf`を作成：
+### Config File (Optional) / 設定ファイル（オプション）
+
+Create `~/.git-worktree-sync.conf` to customize behavior:
+動作をカスタマイズするには`~/.git-worktree-sync.conf`を作成します：
 
 ```bash
 # Base directory for worktrees
